@@ -1,0 +1,12 @@
+*.txt
+*.pt
+*.gz
+*.pyc
+
+# some test files
+.vscode/
+config/
+new_config/
+data/
+result/
+*__pycache__*

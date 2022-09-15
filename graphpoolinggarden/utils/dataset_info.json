@@ -1,0 +1,32 @@
+{
+    "DD": {
+        "metric": "acc",
+        "num_tasks":1,
+        "task_type": "binary classification"
+    },
+    "ogbg-molhiv": {
+        "metric": "rocauc",
+        "num_tasks":1,
+        "task_type":"binary classification"
+    },
+    "ogbg-code2":{
+        "task_type" :"subtoken prediction"
+    },
+    "ENZYMES": {
+        "metric": "acc",
+        "num_tasks":6,
+        "task_type": "multiple classification",
+        "in_dim":21
+    },
+    "IMDB-MULTI": {
+        "metric": "acc",
+        "num_tasks":3,
+        "task_type": "multiple classification",
+        "in_dim":89
+    },
+    "REDDIT-MULTI-12K":{
+        "metric": "acc",
+        "num_tasks":11,
+        "task_type": "multiple classification"
+    }
+}
