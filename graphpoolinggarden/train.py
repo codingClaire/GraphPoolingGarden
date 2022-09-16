@@ -290,9 +290,6 @@ def main(net_parameters):
             valid_perf = eval(model,device, valid_loader, metrics_evaluator, dataset_info["task_type"])
             test_perf = eval(model, device, test_loader, metrics_evaluator, dataset_info["task_type"])
     
-        train_curve.append(train_perf[dataset_info["metric"]])
-        valid_curve.append(valid_perf[dataset_info["metric"]])
-        test_curve.append(test_perf[dataset_info["metric"]])
 
         if net_parameters["dataset_name"] == "ogbg-code2":
             # add more metrics

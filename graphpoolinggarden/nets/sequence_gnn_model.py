@@ -25,6 +25,8 @@ class sequenceModel(torch.nn.Module):
         ### 0. Feature Encode ### 
         if self.dataset_name == "ogbg-code2":
             #### special for ogbg-code2 #### 
+            self.max_seq_len = params["max_seq_len"]
+            self.num_vocab = params["num_vocab"] + 2 # for <unk> and <eos>
             self.feature_encoder = ASTFeatureEncoder(self.emb_dim,
             params["num_nodetypes"],params["num_nodeattributes"], params["max_depth"])
         else:
@@ -40,6 +42,7 @@ class sequenceModel(torch.nn.Module):
         self.pool_layer = PoolingLayer(params)
 
         ### 3.Prediction ###
+        self.graph_pred_linear_list = torch.nn.ModuleList()
         if self.graph_pooling == "set2set":
             if self.dataset_name =="ogbg-code2":
                 for _ in range(self.max_seq_len):

@@ -17,9 +17,7 @@ class hierarchicalModel(torch.nn.Module):
         self.in_dim = params["in_dim"] # original node in_dim
         self.dataset_name = params["dataset_name"]
         self.virtual_node = params["virtual_node"]
-        self.max_seq_len = params["max_seq_len"]
-        self.num_vocab = params["num_vocab"] + 2 # for <unk> and <eos>
-
+        
         # check validation
         if self.gnn_type not in ["gcn", "gin"]:
             raise ValueError("Invalid GNN type.")
@@ -27,6 +25,8 @@ class hierarchicalModel(torch.nn.Module):
             raise ValueError("Number of GNN layers must be greater than 1.")
         if self.dataset_name == "ogbg-code2":
             #### special for ogbg-code2 #### 
+            self.max_seq_len = params["max_seq_len"]
+            self.num_vocab = params["num_vocab"] + 2 # for <unk> and <eos>
             self.feature_encoder = ASTFeatureEncoder(self.emb_dim,
             params["num_nodetypes"],params["num_nodeattributes"], params["max_depth"])
         else:
