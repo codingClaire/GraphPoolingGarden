@@ -13,7 +13,13 @@ class GnnLayer(torch.nn.Module):
         self.residual = params["residual"]
         self.gnn_type = params["gnn_type"]
         self.emb_dim = params["emb_dim"]
-        self.in_dim = params["in_dim"]
+        if "edge_dim" in params.keys():
+            # currently only for ogbg-code2 dataset
+            self.edge_dim  = params["edge_dim"]
+        else:
+            # for this situation in conv layer
+            # edge_dim is useless
+            self.edge_dim  = params["in_dim"]
         self.dataset_name = params["dataset_name"]
         if self.num_layer < 2:
             raise ValueError("Number of GNN layers must be greater than 1.")
@@ -24,9 +30,9 @@ class GnnLayer(torch.nn.Module):
 
         for _ in range(self.num_layer):
             if self.gnn_type == 'gin':
-                self.convs.append(GINConv(self.dataset_name, self.in_dim,self.emb_dim))
+                self.convs.append(GINConv(self.dataset_name, self.edge_dim,self.emb_dim))
             elif self.gnn_type == 'gcn':
-                self.convs.append(GCNConv(self.dataset_name, self.in_dim,self.emb_dim))
+                self.convs.append(GCNConv(self.dataset_name,self.edge_dim,self.emb_dim))
             else:
                 raise ValueError('Undefined GNN type called {}'.format(self.gnn_type))
 

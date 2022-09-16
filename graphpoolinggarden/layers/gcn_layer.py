@@ -7,12 +7,12 @@ from layers.encoders import EdgeEncoder
 
 
 class GCNConv(MessagePassing):
-    def __init__(self, dataset_name, in_dim, emb_dim):
+    def __init__(self, dataset_name, edge_dim, emb_dim):
         super(GCNConv, self).__init__(aggr="add")
 
         self.linear = torch.nn.Linear(emb_dim, emb_dim)
         self.root_emb = torch.nn.Embedding(1, emb_dim)
-        self.edge_encoder = EdgeEncoder(dataset_name, in_dim, emb_dim)
+        self.edge_encoder = EdgeEncoder(dataset_name, edge_dim, emb_dim)
 
     def forward(self, x, edge_index, edge_attr):
         x = self.linear(x)

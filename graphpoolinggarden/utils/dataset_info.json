@@ -10,7 +10,10 @@
         "task_type":"binary classification"
     },
     "ogbg-code2":{
-        "task_type" :"subtoken prediction"
+        "metric": "F1",
+        "num_tasks":1,
+        "task_type" :"subtoken prediction",
+        "in_dim" : 0
     },
     "ENZYMES": {
         "metric": "acc",

@@ -20,6 +20,8 @@ class DatasetLoader():
             dataset = TUDataset('data/', name=dataset_name, use_node_attr=True)
             #args.num_classes = dataset.num_classes
             #args.num_features = dataset.num_features
-        elif dataset_name == "ogbg-molhiv" or dataset_name == "ogbg-code2" :
+        elif dataset_name == "ogbg-molhiv":
             dataset = PygGraphPropPredDataset(name = dataset_name, root = 'data/')
+        elif dataset_name =="ogbg-code2":
+            dataset = PygGraphPropPredDataset(name = dataset_name, root = 'data/') 
         return dataset

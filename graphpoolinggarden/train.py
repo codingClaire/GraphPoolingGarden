@@ -2,9 +2,11 @@ import torch
 from torch_geometric.loader import DataLoader
 import torch.optim as optim
 from torch.utils.data import random_split
+from torchvision import transforms
 
 from tqdm import tqdm
 import numpy as np
+import pandas as pd
 import json
 import random
 import os
@@ -13,6 +15,12 @@ import copy
 from dataset.DatasetLoader import DatasetLoader
 from utils.evaluate import metricsEvaluator
 from utils.datasetaugment import get_dataset_info
+from utils.datasetaugment import (
+    get_vocab_mapping,
+    augment_edge,
+    encode_y_to_arr,
+    decode_arr_to_seq,
+)
 from utils.argparser import get_argparser
 from utils.parameter import check_parameter
 from utils.file import save_csv
@@ -56,6 +64,12 @@ def train(model, device, loader, optimizer, task_type):
                     # pred[is_labeled],
                     # batch.y[is_labeled],
                 )
+            elif task_type == "subtoken prediction":
+                # ogbg-code2
+                loss = 0
+                for i in range(len(pred)):
+                    loss += mcls_criterion(pred[i].to(torch.float32), batch.y_arr[:, i])
+                loss = loss / len(pred)
             else:
                 loss = reg_criterion(
                     pred.to(torch.float32)[is_labeled],
@@ -94,6 +108,41 @@ def eval(model, device, loader, evaluator, task_type):
     return evaluator.eval(input_dict)
 
 
+def eval_for_code(model, device, loader, evaluator, arr_to_seq):
+    model = model.to(device)
+    model.eval()
+    seq_ref_list = []
+    seq_pred_list = []
+
+    for _, batch in enumerate(tqdm(loader, desc="Iteration")):
+        batch = batch.to(device)
+        if batch.x.shape[0] == 1:
+            pass
+        else:
+            with torch.no_grad():
+                pred_list = model(batch)
+
+            mat = []
+            for i in range(len(pred_list)):
+                mat.append(torch.argmax(pred_list[i], dim=1).view(-1, 1))
+            mat = torch.cat(mat, dim=1)
+
+            seq_pred = [arr_to_seq(arr) for arr in mat]
+
+            # PyG = 1.4.3
+            # seq_ref = [batch.y[i][0] for i in range(len(batch.y))]
+
+            # PyG >= 1.5.0
+            seq_ref = [batch.y[i] for i in range(len(batch.y))]
+
+            seq_ref_list.extend(seq_ref)
+            seq_pred_list.extend(seq_pred)
+
+    input_dict = {"seq_ref": seq_ref_list, "seq_pred": seq_pred_list}
+
+    return evaluator.eval(input_dict)
+
+
 def seed_everything(seed_value):
     random.seed(seed_value)
     np.random.seed(seed_value)
@@ -120,7 +169,26 @@ def main(net_parameters):
     dataset_info = get_dataset_info(net_parameters["dataset_name"])
     net_parameters["in_dim"] = dataset_info["in_dim"]
     net_parameters["num_tasks"] = dataset_info["num_tasks"]
-    # special operation for each dataset
+    ### set seed
+    seed_everything(net_parameters["seed"])
+    ### split dataset with the dataset_ratio
+    # dataset_ration can be set on json file such as 0.1, 0.5 or so
+    if "dataset_ratio" not in net_parameters.keys():
+        net_parameters["dataset_ratio"] = 1
+    total_num = int(len(dataset) * net_parameters["dataset_ratio"])
+    perm = torch.randperm(total_num)
+    num_train = int(total_num * 0.8)
+    num_val = int(total_num * 0.1)
+    num_test = total_num - (num_train + num_val)
+
+    train_idx = perm[:num_train]
+    valid_idx = perm[num_train : num_train + num_val]
+    test_idx = perm[num_train + num_val :]
+
+    assert len(train_idx) == num_train
+    assert len(valid_idx) == num_val
+    assert len(test_idx) == num_test
+    ### whole dataset transform
     if net_parameters["dataset_name"] == "ogbg-molhiv":
         if net_parameters["feature"] == "full":
             pass
@@ -129,14 +197,41 @@ def main(net_parameters):
             # only retain the top two node/edge features
             dataset.data.x = dataset.data.x[:, :2]
             dataset.data.edge_attr = dataset.data.edge_attr[:, :2]
+    elif net_parameters["dataset_name"] == "ogbg-code2":
+        ### building vocabulary for sequence predition. Only use training data.
+        vocab2idx, idx2vocab = get_vocab_mapping(
+            [dataset.data.y[i] for i in train_idx], net_parameters["num_vocab"]
+        )
 
+        nodetypes_mapping = pd.read_csv(
+            os.path.join(dataset.root, "mapping", "typeidx2type.csv.gz")
+        )
+        nodeattributes_mapping = pd.read_csv(
+            os.path.join(dataset.root, "mapping", "attridx2attr.csv.gz")
+        )
 
-    seed_everything(net_parameters["seed"])
-    num_train = int(len(dataset) * 0.8)
-    num_val = int(len(dataset) * 0.1)
-    num_test = len(dataset) - (num_train + num_val)
-    train_set, validation_set, test_set = random_split(
-        dataset, [num_train, num_val, num_test]
+        dataset.transform = transforms.Compose(
+            [
+                augment_edge,
+                lambda data: encode_y_to_arr(
+                    data, vocab2idx, net_parameters["max_seq_len"]
+                ),
+            ]
+        )
+
+        net_parameters["num_nodetypes"] = len(nodetypes_mapping["type"])
+        net_parameters["num_nodeattributes"] = len(nodeattributes_mapping["attr"])
+        net_parameters["max_depth"] = 20
+        net_parameters["edge_dim"] = 2
+
+    ########### split dataset #############
+    # train_set, validation_set, test_set = random_split(
+    #    dataset, [num_train, num_val, num_test]
+    # )
+    train_set, validation_set, test_set = (
+        dataset[train_idx],
+        dataset[valid_idx],
+        dataset[test_idx],
     )
 
     train_loader = DataLoader(
@@ -157,7 +252,9 @@ def main(net_parameters):
         shuffle=False,
         num_workers=net_parameters["num_workers"],
     )
-    if(net_parameters["model"] == "hierarchical"):
+
+    ####### initialze model (global/hieraraichal) ######
+    if net_parameters["model"] == "hierarchical":
         model = hierarchicalModel(net_parameters).to(device)
     else:
         # global model
@@ -168,6 +265,9 @@ def main(net_parameters):
     valid_curve = []
     test_curve = []
     train_curve = []
+    if net_parameters["dataset_name"] == "ogbg-code2":
+        train_precision, test_precision, valid_precision = [],[],[]
+        train_recall,test_recall,valid_recall = [],[],[]
     metrics_evaluator = metricsEvaluator(net_parameters["dataset_name"])
     for epoch in range(1, net_parameters["epochs"] + 1):
         print("=====Epoch {}".format(epoch))
@@ -175,28 +275,61 @@ def main(net_parameters):
         train(model, device, train_loader, optimizer, dataset_info["task_type"])
 
         print("Evaluating...")
-        train_perf = eval(
-            model, device, train_loader, metrics_evaluator, dataset_info["task_type"]
-        )
-        valid_perf = eval(
-            model, device, valid_loader, metrics_evaluator, dataset_info["task_type"]
-        )
-        test_perf = eval(
-            model, device, test_loader, metrics_evaluator, dataset_info["task_type"]
-        )
-
-        print({"Train": train_perf, "Validation": valid_perf, "Test": test_perf})
-
+        if net_parameters["dataset_name"] == "ogbg-code2":
+            train_perf = eval_for_code(model,device,train_loader,metrics_evaluator,
+                arr_to_seq=lambda arr: decode_arr_to_seq(arr, idx2vocab),
+            )
+            valid_perf = eval_for_code(model,device,valid_loader,metrics_evaluator,
+                arr_to_seq=lambda arr: decode_arr_to_seq(arr, idx2vocab),
+            )
+            test_perf = eval_for_code(model,device,test_loader,metrics_evaluator,
+                arr_to_seq=lambda arr: decode_arr_to_seq(arr, idx2vocab),
+            )
+        else:
+            train_perf = eval(model,device, train_loader, metrics_evaluator, dataset_info["task_type"])
+            valid_perf = eval(model,device, valid_loader, metrics_evaluator, dataset_info["task_type"])
+            test_perf = eval(model, device, test_loader, metrics_evaluator, dataset_info["task_type"])
+    
         train_curve.append(train_perf[dataset_info["metric"]])
         valid_curve.append(valid_perf[dataset_info["metric"]])
         test_curve.append(test_perf[dataset_info["metric"]])
 
-    if "classification" in dataset_info["task_type"]:
+        if net_parameters["dataset_name"] == "ogbg-code2":
+            # add more metrics
+            train_precision.append(train_perf['precision'])
+            test_precision.append(test_perf['precision'])
+            valid_precision.append(valid_perf['precision'])
+            train_recall.append(train_perf['recall'])
+            test_recall.append(test_perf['recall'])
+            valid_recall.append(valid_perf['recall'])
+
+
+        print({"Train": train_perf, "Validation": valid_perf, "Test": test_perf})
+        train_curve.append(train_perf[dataset_info["metric"]])
+        valid_curve.append(valid_perf[dataset_info["metric"]])
+        test_curve.append(test_perf[dataset_info["metric"]])
+
+        best_val_epoch = np.argmax(np.array(valid_curve))
+        best_train = max(train_curve)
+        print("current_best:")
+        print("Train score: {}".format(train_curve[best_val_epoch]))
+        print("Validation score: {}".format(valid_curve[best_val_epoch]))
+        print("Test score: {}".format(test_curve[best_val_epoch]))
+        if net_parameters["dataset_name"] == "ogbg-code2":
+            print("Train Precision: {}, Recall: {}".format(train_precision[best_val_epoch],train_recall[best_val_epoch]))
+            print("Valid Precision: {}, Recall: {}".format(valid_precision[best_val_epoch],valid_recall[best_val_epoch]))
+            print("Test Precision: {}, Recall: {}".format(test_precision[best_val_epoch],test_recall[best_val_epoch]))
+            
+
+    ############# end epoch ##################### 
+    if "classification" in dataset_info["task_type"] or "prediction" in dataset_info["task_type"]:
         best_val_epoch = np.argmax(np.array(valid_curve))
         best_train = max(train_curve)
     else:
+        # TODO ?
         best_val_epoch = np.argmin(np.array(valid_curve))
         best_train = min(train_curve)
+
 
     print("Finished training!")
     print("Best validation:")
@@ -216,22 +349,20 @@ def main(net_parameters):
 def repeat_experiment():
     parser = get_argparser()
     args = parser.parse_args()
-    config = args.config 
+    config = args.config
     with open(config) as f:
         total_parameters = json.load(f)
-    if(isinstance(total_parameters["seed"],list)):
+    if isinstance(total_parameters["seed"], list):
         for seed in total_parameters["seed"]:
-            if(isinstance(total_parameters["dataset_name"],list)):
+            if isinstance(total_parameters["dataset_name"], list):
                 for dataset in total_parameters["dataset_name"]:
-                    print("current seed: ", seed,
-                          " current dataset: ", dataset)
+                    print("current seed: ", seed, " current dataset: ", dataset)
                     net_parameters = copy.deepcopy(total_parameters)
                     net_parameters["seed"] = seed
                     net_parameters["dataset_name"] = dataset
                     result = main(net_parameters)
                     net_parameters.update(result)
-                    save_csv(net_parameters,"result")
-
+                    save_csv(net_parameters, "result")
 
 
 if __name__ == "__main__":

@@ -28,7 +28,7 @@
 
 ## 支持的pooling方法
 - set2set
-- sagpool(sequence/hierarichical)
+- sagpool(sequence/hierarchical)
 
 ## 支持的readout方法
 - mean

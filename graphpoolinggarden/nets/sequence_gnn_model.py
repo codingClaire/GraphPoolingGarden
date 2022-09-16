@@ -2,7 +2,7 @@ import torch
 from layers.GNN_node import GnnLayer
 from layers.GNN_virtual_node import GnnLayerwithVirtualNode
 from pooling.poolinglayer import PoolingLayer
-from layers.encoders import FeatureEncoder
+from layers.encoders import FeatureEncoder,ASTFeatureEncoder
 
 
 class sequenceModel(torch.nn.Module):
@@ -23,8 +23,12 @@ class sequenceModel(torch.nn.Module):
         if self.num_layer < 2:
             raise ValueError("Number of GNN layers must be greater than 1.")
         ### 0. Feature Encode ### 
-        self.feature_encoder = FeatureEncoder(self.dataset_name ,self.in_dim,self.emb_dim)
-        
+        if self.dataset_name == "ogbg-code2":
+            #### special for ogbg-code2 #### 
+            self.feature_encoder = ASTFeatureEncoder(self.emb_dim,
+            params["num_nodetypes"],params["num_nodeattributes"], params["max_depth"])
+        else:
+            self.feature_encoder = FeatureEncoder(self.dataset_name ,self.in_dim,self.emb_dim)
         ### 1.GNN to generate node embeddings ###
         if self.virtual_node == "True":
             self.gnn_layer = GnnLayerwithVirtualNode(params)
@@ -37,19 +41,45 @@ class sequenceModel(torch.nn.Module):
 
         ### 3.Prediction ###
         if self.graph_pooling == "set2set":
-            self.graph_pred_linear = torch.nn.Linear(2 * self.emb_dim, self.num_tasks)
+            if self.dataset_name =="ogbg-code2":
+                for _ in range(self.max_seq_len):
+                    self.graph_pred_linear_list.append(
+                        torch.nn.Linear(2* self.emb_dim, self.num_vocab)
+                    )
+            else:
+                self.graph_pred_linear = torch.nn.Linear(2 * self.emb_dim, self.num_tasks)
         else:
-            self.graph_pred_linear = torch.nn.Linear(self.emb_dim, self.num_tasks)
+            if self.dataset_name =="ogbg-code2":
+                for _ in range(self.max_seq_len):
+                    self.graph_pred_linear_list.append(
+                        torch.nn.Linear(self.emb_dim, self.num_vocab)
+                    )
+            else:
+                self.graph_pred_linear = torch.nn.Linear(self.emb_dim, self.num_tasks)
 
     def forward(self, batched_data):
         """gnn_model: input mini-batch graph data and output the prediction result
         """  
-        input_feature = self.feature_encoder(batched_data.x)
-        
+         ## 1. encode input feature
+        if(self.dataset_name ==  "ogbg-code2"):
+            input_feature = self.feature_encoder(batched_data.x, batched_data.node_depth.view(-1,))
+        else: 
+            input_feature = self.feature_encoder(batched_data.x)
+        ## 2. gnn layer * num_layer times
         if self.virtual_node == "True":
             h_node = self.gnn_layer(input_feature,batched_data.edge_index,batched_data.edge_attr,batched_data.batch)
         else:
             h_node = self.gnn_layer(input_feature,batched_data.edge_index,batched_data.edge_attr)
-        h_graph = self.pool_layer(h_node, batched_data)
-
-        return self.graph_pred_linear(h_graph)
+        
+        ## 3. pool layer+ readout 
+        # TODO: addd multiple pool layers situation
+        graph_representation = self.pool_layer(h_node, batched_data)
+        
+        ## 4. prediction 
+        if(self.dataset_name ==  "ogbg-code2"):
+            pred_list = []
+            for i in range(self.max_seq_len):
+                pred_list.append(self.graph_pred_linear_list[i](graph_representation))
+            return pred_list
+        else:
+            return self.graph_pred_linear(graph_representation)

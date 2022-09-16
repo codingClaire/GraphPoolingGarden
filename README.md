@@ -17,7 +17,7 @@ A repo for baseline of graph pooling methods.
 
 ## Pooling methods
 - set2set
-- sagpool(sequence/hierarichical)
+- sagpool(sequence/hierarchical)
 
 ## Readout methods
 - mean
