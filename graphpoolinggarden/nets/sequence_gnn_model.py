@@ -1,7 +1,7 @@
 import torch
 from layers.GNN_node import GnnLayer
 from layers.GNN_virtual_node import GnnLayerwithVirtualNode
-from pooling.poolinglayer import PoolingLayer
+from pooling.readoutlayer import ReadoutLayer
 from layers.encoders import FeatureEncoder,ASTFeatureEncoder
 
 
@@ -38,8 +38,8 @@ class sequenceModel(torch.nn.Module):
         else:
             self.gnn_layer = GnnLayer(params)
 
-        ### 2.Pooling method to generate pooling of graph ###
-        self.pool_layer = PoolingLayer(params)
+        ### 2.Pooling and Readout to generate pooling of graph ###
+        self.readout_layer = ReadoutLayer(params)
 
         ### 3.Prediction ###
         self.graph_pred_linear_list = torch.nn.ModuleList()
@@ -76,7 +76,7 @@ class sequenceModel(torch.nn.Module):
         
         ## 3. pool layer+ readout 
         # TODO: addd multiple pool layers situation
-        graph_representation = self.pool_layer(h_node, batched_data)
+        graph_representation = self.readout_layer(h_node, batched_data)
         
         ## 4. prediction 
         if(self.dataset_name ==  "ogbg-code2"):

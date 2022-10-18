@@ -27,6 +27,7 @@ from utils.file import save_csv
 
 from nets.sequence_gnn_model import sequenceModel
 from nets.hierarchical_gnn_model import hierarchicalModel
+from nets.graphUnet_model import graphUnetModel
 
 bcls_criterion = torch.nn.BCEWithLogitsLoss()
 mcls_criterion = torch.nn.CrossEntropyLoss()
@@ -253,12 +254,13 @@ def main(net_parameters):
         num_workers=net_parameters["num_workers"],
     )
 
-    ####### initialze model (global/hieraraichal) ######
+    ####### initialze model (global/hieraraichal/graphunet) ######
     if net_parameters["model"] == "hierarchical":
         model = hierarchicalModel(net_parameters).to(device)
-    else:
-        # global model
+    elif net_parameters["model"] == "global":
         model = sequenceModel(net_parameters).to(device)
+    elif net_parameters["model"] == "graphunet":
+        model = graphUnetModel(net_parameters).to(device)
 
     optimizer = optim.Adam(model.parameters(), lr=0.001)
 

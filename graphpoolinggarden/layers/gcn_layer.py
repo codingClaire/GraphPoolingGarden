@@ -19,10 +19,10 @@ class GCNConv(MessagePassing):
         row, col = edge_index
 
         deg = degree(row, x.size(0), dtype=x.dtype) + 1
-        deg_inv_sqrt = deg.pow(-0.5)
+        deg_inv_sqrt = deg.pow(-0.5) # D
         deg_inv_sqrt[deg_inv_sqrt == float("inf")] = 0
 
-        norm = deg_inv_sqrt[row] * deg_inv_sqrt[col]
+        norm = deg_inv_sqrt[row] * deg_inv_sqrt[col] # norm for graph
         if edge_attr != None:
             # for have edge_attr situation
             edge_embedding = self.edge_encoder(edge_attr)

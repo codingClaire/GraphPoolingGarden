@@ -14,7 +14,6 @@ class GnnLayerwithVirtualNode(torch.nn.Module):
         self.residual = params["residual"]
         self.gnn_type = params["gnn_type"]
         self.emb_dim = params["emb_dim"]
-        self.dataset_name = params["dataset_name"]
         if "edge_dim" in params.keys():
             # currently only for ogbg-code2 dataset
             self.edge_dim  = params["edge_dim"]
@@ -22,6 +21,7 @@ class GnnLayerwithVirtualNode(torch.nn.Module):
             # for this situation in conv layer
             # edge_dim is useless
             self.edge_dim  = params["in_dim"]
+        self.dataset_name = params["dataset_name"]
         if self.num_layer < 2:
             raise ValueError("Number of GNN layers must be greater than 1.")
 
@@ -60,13 +60,6 @@ class GnnLayerwithVirtualNode(torch.nn.Module):
             )
 
     def forward(self, input_feature, edge_index,edge_attr,batch):
-
-        #x, edge_index, edge_attr, batch = (
-        #    batched_data.x,
-        #    batched_data.edge_index,
-        #    batched_data.edge_attr,
-        #    batched_data.batch,
-        #)
 
         ### virtual node embeddings for graphs
         virtualnode_embedding = self.virtualnode_embedding(

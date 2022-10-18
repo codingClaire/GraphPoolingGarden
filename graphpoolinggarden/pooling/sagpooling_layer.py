@@ -33,7 +33,7 @@ class SAGPool(torch.nn.Module):
         )
         return new_input_feature, edge_index, edge_attr, new_graph_indicator  # , mask
 
-
+# TODO: change the SAGPoolReadout
 class SAGPoolReadout(torch.nn.Module):
     def __init__(self, sagpool_params, embed_dim):
         super(SAGPoolReadout, self).__init__()
