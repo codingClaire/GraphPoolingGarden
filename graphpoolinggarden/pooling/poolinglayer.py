@@ -1,8 +1,6 @@
 import torch
 
 from pooling.graphunet_pooling_layer import GraphUnetPool
-from pooling.sagpooling_layer import SAGPoolReadout
-from pooling.diffpooling_layer import DiffPoolReadout
 
 class PoolingLayer(torch.nn.Module):
     def __init__(self, params,**kwargs):
@@ -16,8 +14,7 @@ class PoolingLayer(torch.nn.Module):
         else:
             raise ValueError("Invalid graph pooling type.")
 
-    def forward(self, x, batched_data):
-        pool_list = ["sagpool","graphunetpool"]
-        if self.graph_pooling in pool_list:                                                                                   
-            return self.pool(x, batched_data)
-        return self.pool(x, batched_data.batch)
+    def forward(self, h, edge_index, edge_attr, batch):
+        if self.graph_pooling == "graphunetpool":                                                                                   
+            return self.pool(h, edge_index,edge_attr, batch)  
+        return self.pool(h,batch)

@@ -8,7 +8,7 @@ from layers.encoders import EdgeEncoder
 class GINConv(MessagePassing):
     def __init__(self, dataset_name, edge_dim,emb_dim):
         super(GINConv, self).__init__(aggr = "add")
-
+        self.edge_dim = edge_dim
         self.mlp = torch.nn.Sequential( torch.nn.Linear(emb_dim, 2*emb_dim), 
                                         torch.nn.BatchNorm1d(2*emb_dim), 
                                         torch.nn.ReLU(), 
@@ -19,7 +19,7 @@ class GINConv(MessagePassing):
         # self.bond_encoder = BondEncoder(emb_dim = emb_dim)
 
     def forward(self, x, edge_index, edge_attr):
-        if edge_attr != None:
+        if edge_attr != None and edge_attr.shape[1]!=None:
             # for have edge_attr situation  
             edge_embedding = self.edge_encoder(edge_attr)
             out = self.mlp((1 + self.eps) *x + self.propagate(edge_index, x=x, edge_attr=edge_embedding, use_edge_attr = True))

@@ -9,7 +9,7 @@ from layers.encoders import EdgeEncoder
 class GCNConv(MessagePassing):
     def __init__(self, dataset_name, edge_dim, emb_dim):
         super(GCNConv, self).__init__(aggr="add")
-
+        self.edge_dim = edge_dim
         self.linear = torch.nn.Linear(emb_dim, emb_dim)
         self.root_emb = torch.nn.Embedding(1, emb_dim)
         self.edge_encoder = EdgeEncoder(dataset_name, edge_dim, emb_dim)
@@ -23,7 +23,7 @@ class GCNConv(MessagePassing):
         deg_inv_sqrt[deg_inv_sqrt == float("inf")] = 0
 
         norm = deg_inv_sqrt[row] * deg_inv_sqrt[col] # norm for graph
-        if edge_attr != None:
+        if edge_attr != None and len(edge_attr.shape)!=1:
             # for have edge_attr situation
             edge_embedding = self.edge_encoder(edge_attr)
             return self.propagate(
