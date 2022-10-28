@@ -1,62 +1,35 @@
 import torch
 import torch.nn as nn
 from torch.nn import init
-from torch_geometric.nn import global_mean_pool, global_max_pool
+from torch_scatter import scatter
 
 from layers.gcn_layer import GCNConv
-from layers.GNN_node import GnnLayer
-from layers.GNN_virtual_node import GnnLayerwithVirtualNode
+from layers.GNN_node import GnnLayerwithAdj
 
 
-class DiffPoolReadout(torch.nn.Module):
-    def __init__(self, params):
-        super(diffPoolReadout, self).__init__()
-        self.diffpool_params = params["diffpool_params"]
-
-class diffPoolReadout(torch.nn.Module):
-    def __init__(self, params, embed_dim):
-        super(diffPoolReadout, self).__init__()
-        self.diffpool_params = params["diffpool_params"]
-        self.embed_dim = embed_dim
-
-        self.pools = DiffPool(self.diffpool_params, embed_dim)
-        self.linear = torch.nn.Linear(2 * embed_dim, embed_dim)
-
-    def forward(self, input_feature, batched_data):
-        """input the graph information and output the readout result"""
-        edge_index = batched_data.edge_index
-        edge_attr = batched_data.edge_attr
-        graph_indicator = batched_data.batch
-        input_feature, _, _, graph_indicator = self.pools(
-            input_feature, graph_indicator, edge_index, edge_attr
+class EntropyLoss(nn.Module):
+    # Return Scalar
+    def forward(self, adj, anext, s_l):
+        entropy = (
+            (torch.distributions.Categorical(probs=s_l).entropy()).sum(-1).mean(-1)
         )
-        readout = torch.cat(
-            [
-                global_mean_pool(input_feature, graph_indicator),
-                global_max_pool(input_feature, graph_indicator),
-            ],
-            dim=1,
-        )
-        return self.linear(readout)
+        assert not torch.isnan(entropy)
+        return entropy
 
+
+class LinkPredLoss(nn.Module):
+    def forward(self, adj, anext, s_l):
+        link_pred_loss = (adj - s_l.matmul(s_l.transpose(-1, -2))).norm(dim=(1, 2))
+        link_pred_loss = link_pred_loss / (adj.size(1) * adj.size(2))
+        return link_pred_loss.mean()
 
 
 class DiffPool(nn.Module):
-    def init_weights(self):
-        for m in self.modules():
-            if isinstance(m, GCNConv):
-                m.weight.data = init.xavier_uniform(
-                    m.weight.data, gain=nn.init.calculate_gain("relu")
-                )
-                if m.bias is not None:
-                    m.bias.data = init.constant(m.bias.data, 0.0)
-    
-
-    def __init__(self, params, embed_dim):
+    def __init__(self, params, in_dim, assign_dim):
         super(DiffPool, self).__init__()
         self.max_num_nodes = params["max_num_nodes"]
-        self.pool_num = params["pool_num"]
-        self.assign_hidden_dim = params["assign_hidden_dim"]
+        # self.assign_hidden_dim = params["assign_hidden_dim"]
+        self.assign_hidden_dim = assign_dim
         self.assign_ratio = params["assign_ratio"]
         self.assign_num_layers = params["assign_num_layers"]
         self.concat = params["concat"]
@@ -65,84 +38,164 @@ class DiffPool(nn.Module):
         if params["activation"] == "ReLU":
             self.activation = nn.ReLU()
 
-        self.hidden_dim = params["assign_hidden_dim"]
+        #### assignLayers ####
+        assign_params = params
+        assign_params["emb_dim"] = assign_dim  # self.assign_hidden_dim
+        assign_params["num_layer"] = self.assign_num_layers
+
         if self.concat:
-            self.pred_input_dim = self.hidden_dim * (self.assign_num_layers - 1) + embed_dim
+            assign_params["JK"] = "concat"
+            assign_pred_input_dim = (
+                self.assign_hidden_dim * (self.assign_num_layers - 1) + assign_dim
+            )
         else:
-            self.pred_input_dim = embed_dim
+            assign_params["JK"] = "last"
+            assign_pred_input_dim = assign_dim
+
+        # assignment(GNN_l,pool)
+        self.assignLayers = GnnLayerwithAdj(assign_params, two_dim=True, in_dim=in_dim)
+        self.assignPredLayer = nn.Linear(assign_pred_input_dim, assign_dim)
+
+        self.init_weights()
+
+    def forward(self, h, adj):
+        # equation 5 (GNN_l,pool)
+        self.assign_tensor = self.assignLayers(h, adj)
+        # equation 6
+        self.assign_tensor = nn.Softmax(dim=-1)(
+            self.assignPredLayer(self.assign_tensor)
+        )
+        # update pooled feature and adj max
+        h = torch.matmul(torch.transpose(self.assign_tensor, 0, 1), h)
+        adj = (
+            torch.transpose(self.assign_tensor, 0, 1)
+            @ adj.to_dense()
+            @ self.assign_tensor
+        )
+        return h, adj
+
+    def init_weights(self):
+        for m in self.modules():
+            if isinstance(m, GCNConv):
+                m.weight.data = init.xavier_uniform(
+                    m.weight.data, gain=nn.init.calculate_gain("relu")
+                )
+                if m.bias is not None:
+                    m.bias.data = init.constant(m.bias.data, 0.0)
 
 
+# TODO
+class BatchedDiffPool(nn.Module):
+    def __init__(self, params, in_dim, assign_dim):
+        super(BatchedDiffPool, self).__init__()
+        self.max_num_nodes = params["max_num_nodes"]
+        self.assign_hidden_dim = assign_dim  #  params["assign_hidden_dim"]
+        self.assign_ratio = params["assign_ratio"]
+        self.assign_num_layers = params["assign_num_layers"]
+        self.concat = params["concat"]
+        self.bias = params["bias"]
+        self.add_self = not self.concat
+        if params["activation"] == "ReLU":
+            self.activation = nn.ReLU()
 
-        # GCN(GNN_l,pool)
-        gnnLayers = torch.nn.ModuleList()
-        for _ in range(self.pool_layer_num):
-            ### 1.GNN to generate node embeddings ###
-            if self.virtual_node == "True":
-                gnnLayers.append(GnnLayerwithVirtualNode(params))
-            else:
-                gnnLayers.append(GnnLayer(params))
-        
         # assignment(GNN_l,pool)
         self.assignLayers = torch.nn.ModuleList()
         self.assignPredLayers = torch.nn.ModuleList()
-        assign_dim = int(self.max_num_nodes * self.assign_ratio)
-        for _ in range(self.pool_num):
-            #### assignLayers #### 
-            assign_params = params
-            assign_params["in_dim"] = self.pred_input_dim
-            assign_params["emb_dim"] = assign_dim
-            self.assignLayers.append(GnnLayer(assign_params))
-            #### assignPredLayers #### 
-            if self.concat:
-                assign_pred_input_dim = (
-                    self.assign_hidden_dim * (self.assign_num_layers - 1) + assign_dim
-                )
-            else:
-                assign_pred_input_dim= assign_dim
-            self.assignPredLayers.append(nn.Linear(assign_pred_input_dim, assign_dim))
-            assign_dim = int(assign_dim * self.assign_ratio)
-    
+
+        #### assignLayers ####
+        assign_params = params
+        assign_params["in_dim"] = in_dim
+        assign_params["emb_dim"] = assign_dim  # self.assign_hidden_dim
+        assign_params["num_layer"] = self.assign_num_layers
+
+        self.assignLayers.append(GnnLayerwithAdj(assign_params))
+        #### assignPredLayers ####
+        if self.concat:
+            assign_pred_input_dim = (
+                self.assign_hidden_dim * (self.assign_num_layers - 1) + assign_dim
+            )
+        else:
+            assign_pred_input_dim = assign_dim
+        self.assignPredLayers.append(nn.Linear(assign_pred_input_dim, assign_dim))
+
         self.init_weights()
-    
-    def forward(self, input_feature, batched_data):
-        edge_index = batched_data.edge_index
-        edge_attr = batched_data.edge_attr
-        graph_indicator = batched_data.batch
 
-        assign_feature = input_feature
-        # equation 5
-        embedding_tensor = self.self.gnnLayers[0](
-            assign_feature, edge_index, edge_attr
-        )                
-        for i in range(self.pool_num):
-            # equation 5 (GNN_l,pool)
-            self.assign_tensor = self.assignLayers[i](
-                input_feature, edge_index, edge_attr
-            )
-            # equation 6
-            self.assign_tensor = nn.Softmax(dim=-1)(
-                self.assign_pred_modules[i](self.assign_tensor)
-            )
-            # equation 3 
-            input_feature = torch.matmul(
-                torch.transpose(self.assign_tensor, 0, 1), embedding_tensor
-            )
-            assign_feature = input_feature
+    def forward(self, h, adj):
+        # equation 5 (GNN_l,pool)
+        self.assign_tensor = self.gcn_forward(h, adj, self.assignLayers)
+        # equation 6
+        self.assign_tensor = nn.Softmax(dim=-1)(
+            self.assign_pred_modules(self.assign_tensor)
+        )
+        # update pooled feature and adj max
+        h = torch.matmul(torch.transpose(self.assign_tensor, 0, 1), h)
+        adj = (
+            torch.transpose(self.assign_tensor, 0, 1)
+            @ adj.to_dense()
+            @ self.assign_tensor
+        )
+        ### caculate loss ###
+        """
+        for loss_layer in self.reg_loss:
+            loss_name = str(type(loss_layer).__name__)
+            self.loss_log[loss_name] = loss_layer(adj, anext, s_l)
+        if log:
+            self.log["a"] = anext.cpu().numpy()
+        """
+        return h, adj
 
-            # TODO :update adj --> edge_attr --> edge_index
-            adj = (
-                torch.transpose(self.assign_tensor, 0, 1)
-                @ adj.to_dense()
-                @ self.assign_tensor
-            )
-            
-            #edge_index, edge_attr = filter_adj(
-            #edge_index, edge_attr, mask, num_nodes=attn_score.size(0)
+    def init_weights(self):
+        for m in self.modules():
+            if isinstance(m, GCNConv):
+                m.weight.data = init.xavier_uniform(
+                    m.weight.data, gain=nn.init.calculate_gain("relu")
+                )
+                if m.bias is not None:
+                    m.bias.data = init.constant(m.bias.data, 0.0)
 
 
-            # TODO: update graph_indicator
+class DiffPoolReadout(nn.Module):
+    def __init__(self):
+        super(DiffPoolReadout, self).__init__()
 
-            embedding_tensor = self.gnnLayers[i + 1](
-                input_feature, edge_index, edge_attr
+    def forward(self, hs, graph_indicators):
+        layer = len(graph_indicators)
+        batch = int(max(graph_indicators[0]) + 1)
+        h_mean, h_sum, h_max = [], [], []  # torch.zeros_like(batch,layer*dim)
+        for i in range(layer):
+            h_mean.append(
+                scatter(
+                    hs[i],
+                    graph_indicators[layer - i - 1],
+                    dim=0,
+                    dim_size=batch,
+                    reduce="mean",
+                )
             )
-        return embedding_tensor, graph_indicator
+            h_sum.append(
+                scatter(
+                    hs[i],
+                    graph_indicators[layer - i - 1],
+                    dim=0,
+                    dim_size=batch,
+                    reduce="add",
+                )
+            )
+            h_max.append(
+                scatter(
+                    hs[i],
+                    graph_indicators[layer - i - 1],
+                    dim=0,
+                    dim_size=batch,
+                    reduce="max",
+                )
+            )
+        readout = torch.cat(
+            (
+                torch.cat(h_max, dim=1),
+                torch.cat(h_sum, dim=1),
+                torch.cat(h_mean, dim=1),
+            ),
+            dim=1,
+        )
+        return readout

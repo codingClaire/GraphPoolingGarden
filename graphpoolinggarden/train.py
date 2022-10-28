@@ -1,7 +1,6 @@
 import torch
 from torch_geometric.loader import DataLoader
 import torch.optim as optim
-from torch.utils.data import random_split
 from torchvision import transforms
 
 from tqdm import tqdm
@@ -23,11 +22,13 @@ from utils.datasetaugment import (
 )
 from utils.argparser import get_argparser
 from utils.parameter import check_parameter
-from utils.file import save_csv
+from utils.file import save_csv_with_configname
+from utils.train_util import load_epoch
 
 from nets.sequence_gnn_model import sequenceModel
 from nets.hierarchical_gnn_model import hierarchicalModel
 from nets.graphUnet_model import graphUnetModel
+from nets.diffpool_model import diffPoolModel
 
 bcls_criterion = torch.nn.BCEWithLogitsLoss()
 mcls_criterion = torch.nn.CrossEntropyLoss()
@@ -254,15 +255,24 @@ def main(net_parameters):
         num_workers=net_parameters["num_workers"],
     )
 
-    ####### initialze model (global/hieraraichal/graphunet) ######
+    ####### initialize model (global/hieraraichal/graphunet) ######
     if net_parameters["model"] == "hierarchical":
         model = hierarchicalModel(net_parameters).to(device)
     elif net_parameters["model"] == "global":
         model = sequenceModel(net_parameters).to(device)
     elif net_parameters["model"] == "graphunet":
         model = graphUnetModel(net_parameters).to(device)
-
+    elif net_parameters["model"] == "diffpoolmodel":
+        model = diffPoolModel(net_parameters).to(device)
+    ###### initialize
+    optimizer_state_dict = None
+    if net_parameters["load"] > 0:
+        model_state_dict, optimizer_state_dict = load_epoch(net_parameters["model_path"], net_parameters["load"])
+        model.load_state_dict(model_state_dict)
+    model.to(device)
     optimizer = optim.Adam(model.parameters(), lr=0.001)
+    if optimizer_state_dict is not None:
+        optimizer.load_state_dict(optimizer_state_dict)
 
     valid_curve = []
     test_curve = []
@@ -271,7 +281,7 @@ def main(net_parameters):
         train_precision, test_precision, valid_precision = [],[],[]
         train_recall,test_recall,valid_recall = [],[],[]
     metrics_evaluator = metricsEvaluator(net_parameters["dataset_name"])
-    for epoch in range(1, net_parameters["epochs"] + 1):
+    for epoch in range(net_parameters["load"] + 1, net_parameters["epochs"] + 1):
         print("=====Epoch {}".format(epoch))
         print("Training...")
         train(model, device, train_loader, optimizer, dataset_info["task_type"])
@@ -318,7 +328,13 @@ def main(net_parameters):
             print("Train Precision: {}, Recall: {}".format(train_precision[best_val_epoch],train_recall[best_val_epoch]))
             print("Valid Precision: {}, Recall: {}".format(valid_precision[best_val_epoch],valid_recall[best_val_epoch]))
             print("Test Precision: {}, Recall: {}".format(test_precision[best_val_epoch],test_recall[best_val_epoch]))
-            
+        
+        if net_parameters["save_every_epoch"] and epoch % net_parameters["save_every_epoch"]  == 0:
+            tqdm.write("saving to epoch.%04d.pth" % epoch)
+            torch.save(
+                (model.state_dict(), optimizer.state_dict()),
+                os.path.join(net_parameters["model_path"], "epoch.%04d.pth" % epoch),
+            )
 
     ############# end epoch ##################### 
     if "classification" in dataset_info["task_type"] or "prediction" in dataset_info["task_type"]:
@@ -349,6 +365,7 @@ def repeat_experiment():
     parser = get_argparser()
     args = parser.parse_args()
     config = args.config
+    config_name = config.split("/")[-1].split(".")[0]
     with open(config) as f:
         total_parameters = json.load(f)
     if isinstance(total_parameters["seed"], list):
@@ -361,7 +378,7 @@ def repeat_experiment():
                     net_parameters["dataset_name"] = dataset
                     result = main(net_parameters)
                     net_parameters.update(result)
-                    save_csv(net_parameters, "result")
+                    save_csv_with_configname(net_parameters,"result",config_name)
 
 
 if __name__ == "__main__":

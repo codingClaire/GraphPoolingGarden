@@ -1,7 +1,5 @@
-from re import T
 import torch
 import torch.nn as nn
-# from torch_geometric.nn import global_mean_pool, global_max_pool, global_add_pool
 from torch_scatter import scatter
 
 def top_k_graph(scores, edge_index, edge_attr, batch, h, k):

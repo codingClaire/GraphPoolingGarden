@@ -2,6 +2,7 @@ import torch
 import torch.nn.functional as F
 from layers.gin_layer import GINConv
 from layers.gcn_layer import GCNConv
+from layers.gcn_layer import GCNConvwithAdj
 
 ### GNN to generate node embedding
 class GnnLayer(torch.nn.Module):
@@ -65,4 +66,83 @@ class GnnLayer(torch.nn.Module):
             for layer in range(self.num_layer + 1):
                 node_representation += h_list[layer]
 
+        return node_representation
+
+
+
+### GNN to generate node embedding
+class GnnLayerwithAdj(torch.nn.Module):
+    """Summary
+    The class is used for multiple stacked gnnlayers implementation with h and adj as input.
+    In DiffPool, the adjacency matrix are not discrete, 
+    therefore cannot convert to edge_index and edge_attr and use GnnLayer class
+    """
+    def __init__(self, params,**kwargs):
+        super(GnnLayerwithAdj, self).__init__()
+        self.num_layer =  params["num_layer"]
+        self.drop_ratio = params["drop_ratio"]
+        if "JK" not in params.keys():
+            self.JK = "last"
+        else:
+            self.JK = params["JK"]
+        if "residual" not in params.keys():
+            self.residual = "False"
+        else:
+            self.residual = params["residual"]
+        if "gnn_type" not in params.keys():
+            self.gnn_type = "gcn"
+        else:
+            self.gnn_type = params["gnn_type"]
+        self.emb_dim = params["emb_dim"]
+        self.two_dim = kwargs["two_dim"] if "two_dim" in kwargs.keys() else False
+        self.in_dim = kwargs["in_dim"] if "in_dim" in kwargs.keys() else self.emb_dim
+        self.dataset_name = params["dataset_name"]
+        if self.num_layer < 2:
+            raise ValueError("Number of GNN layers must be greater than 1.")
+        if "tensorized" in kwargs.keys():
+            self.tensorized = kwargs["tensorized"]
+        ###List of GNNs
+        self.convs = torch.nn.ModuleList()
+        self.batch_norms = torch.nn.ModuleList()
+
+        if self.gnn_type == 'gcn':
+                self.convs.append(GCNConvwithAdj(self.in_dim,self.emb_dim,self.drop_ratio))
+        else:
+            raise ValueError('Undefined GNN type called {}'.format(self.gnn_type))
+        for _ in range(self.num_layer-1):
+            if self.gnn_type == 'gcn':
+                self.convs.append(GCNConvwithAdj(self.emb_dim,self.emb_dim,self.drop_ratio))
+            else:
+                raise ValueError('Undefined GNN type called {}'.format(self.gnn_type))
+
+            self.batch_norms.append(torch.nn.BatchNorm1d(self.emb_dim))
+
+    def forward(self, h, adj):
+        ### computing input node embedding
+        if self.two_dim == True:
+            cat_dim =1
+            h_list = []
+            for layer in range(self.num_layer):
+                # the input will be reversed
+                h = self.convs[layer](h,adj)
+                h_list.append(h) 
+        else:
+            cat_dim = 2
+            h_list = []
+            for layer in range(self.num_layer):
+                # the dropout operation is in self.convs[layers]
+                h = self.convs[layer](h, adj)
+                if layer != self.num_layer - 1:
+                    h = self.batch_norms[layer](F.relu(h))
+                h_list.append(h)
+
+        ### Different implementations of Jk-concat
+        if self.JK == "last":
+            node_representation = h_list[-1]
+        elif self.JK == "sum":
+            node_representation = 0
+            for layer in range(self.num_layer + 1):
+                node_representation += h_list[layer]
+        elif self.JK == "concat":
+            node_representation = torch.cat(h_list,dim=cat_dim)
         return node_representation

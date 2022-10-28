@@ -13,7 +13,6 @@ class SingleGnnLayer(torch.nn.Module):
         super(SingleGnnLayer, self).__init__()
         self.drop_ratio = params["drop_ratio"]
         self.JK = params["JK"]
-        self.residual = params["residual"]
         self.gnn_type = params["gnn_type"]
         self.emb_dim = params["emb_dim"]
         if "edge_dim" in params.keys():
@@ -53,3 +52,26 @@ class SingleGnnLayer(torch.nn.Module):
                 node_representation += h_list[layer]
 
         return node_representation
+
+
+class SingleGCNwithAdj(torch.nn.Module):
+    # the edge_attr is not encoded in SingleGCNwithAdj
+    def __init__(self, params, bias=True):
+        super(SingleGCNwithAdj, self).__init__()
+        self.drop_ratio = params["drop_ratio"]
+        self.JK = params["JK"]
+        self.emb_dim = params["emb_dim"]
+        self.in_dim = params["input_dim"]
+        self.weight = torch.nn.Parameter(torch.FloatTensor(self.in_dim , self.emb_dim).cuda())
+        if bias:
+            self.bias = torch.nn.Parameter(torch.FloatTensor(self.emb_dim).cuda())
+        else:
+            self.bias = None
+
+    def forward(self, h, adj):
+        h = F.dropout(h, self.drop_ratio, training = self.training)
+        h = torch.matmul(adj, h)
+        h = torch.matmul(h, self.weight)
+        if self.bias is not None:
+            h = h + self.bias
+        return h

@@ -19,11 +19,11 @@ class GCNConv(MessagePassing):
         row, col = edge_index
 
         deg = degree(row, x.size(0), dtype=x.dtype) + 1
-        deg_inv_sqrt = deg.pow(-0.5) # D
+        deg_inv_sqrt = deg.pow(-0.5)  # D
         deg_inv_sqrt[deg_inv_sqrt == float("inf")] = 0
 
-        norm = deg_inv_sqrt[row] * deg_inv_sqrt[col] # norm for graph
-        if edge_attr != None and len(edge_attr.shape)!=1:
+        norm = deg_inv_sqrt[row] * deg_inv_sqrt[col]  # norm for graph
+        if edge_attr != None and len(edge_attr.shape) != 1:
             # for have edge_attr situation
             edge_embedding = self.edge_encoder(edge_attr)
             return self.propagate(
@@ -32,9 +32,13 @@ class GCNConv(MessagePassing):
         else:
             # for no edge_attr situation
             edge_embedding = 0
-            return self.propagate(edge_index, x=x, norm=norm, edge_attr=edge_embedding, use_edge_attr=False) + F.relu(
-                x + self.root_emb.weight
-            ) * 1.0 / deg.view(-1, 1)
+            return self.propagate(
+                edge_index,
+                x=x,
+                norm=norm,
+                edge_attr=edge_embedding,
+                use_edge_attr=False,
+            ) + F.relu(x + self.root_emb.weight) * 1.0 / deg.view(-1, 1)
 
     def message(self, x_j, edge_attr, norm):
         if edge_attr != None:
@@ -46,3 +50,25 @@ class GCNConv(MessagePassing):
 
     def update(self, aggr_out):
         return aggr_out
+
+
+class GCNConvwithAdj(torch.nn.Module):
+    # the edge_attr is not encoded in SingleGCNwithAdj
+    def __init__(self, in_dim, emb_dim, drop_ratio, bias=True):
+        super(GCNConvwithAdj, self).__init__()
+        self.drop_ratio = drop_ratio
+        self.emb_dim = emb_dim
+        self.in_dim = in_dim
+        self.weight = torch.nn.Parameter(torch.FloatTensor(self.in_dim , self.emb_dim).cuda())
+        if bias:
+            self.bias = torch.nn.Parameter(torch.FloatTensor(self.emb_dim).cuda())
+        else:
+            self.bias = None
+
+    def forward(self, h, adj):
+        h = F.dropout(h, self.drop_ratio, training = self.training)
+        h = torch.matmul(adj, h)
+        h = torch.matmul(h, self.weight)
+        if self.bias is not None:
+            h = h + self.bias
+        return h

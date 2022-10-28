@@ -29,6 +29,7 @@
 ## 支持的pooling方法
 - set2set
 - sagpool(sequence/hierarchical)
+- Graph U-net
 
 ## 支持的readout方法
 - mean

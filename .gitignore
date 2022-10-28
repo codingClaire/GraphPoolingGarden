@@ -2,6 +2,7 @@
 *.pt
 *.gz
 *.pyc
+*.out
 
 # some test files
 .vscode/
@@ -10,3 +11,4 @@ new_config/
 data/
 result/
 *__pycache__*
+path/

@@ -37,9 +37,9 @@ class ReadoutLayer(torch.nn.Module):
         elif self.graph_pooling == "sagpool":
             self.readout = SAGPoolReadout(params["sagpool"], self.embed_dim)
         elif self.graph_pooling == "diffpool":
-            self.readout = DiffPoolReadout(params["diffpool"],self.embed_dim)
+            self.readout = DiffPoolReadout()
         elif self.graph_pooling == "graphunetpool":
-            self.readout = GraphUnetReadout() # params["graphunetpool"]
+            self.readout = GraphUnetReadout()
         else:
             raise ValueError("Invalid graph pooling type.")
 
