@@ -25,13 +25,14 @@ class LinkPredLoss(nn.Module):
 
 
 class DiffPool(nn.Module):
-    def __init__(self, params, in_dim, assign_dim):
+    def __init__(self, params, in_dim, assign_dim,**kwargs):
         super(DiffPool, self).__init__()
         self.max_num_nodes = params["max_num_nodes"]
         # self.assign_hidden_dim = params["assign_hidden_dim"]
         self.assign_hidden_dim = assign_dim
         self.assign_ratio = params["assign_ratio"]
         self.assign_num_layers = params["assign_num_layers"]
+        self.two_dim = kwargs["two_dim"] if "two_dim" in kwargs.keys() else False
         self.concat = params["concat"]
         self.bias = params["bias"]
         self.add_self = not self.concat
@@ -53,7 +54,7 @@ class DiffPool(nn.Module):
             assign_pred_input_dim = assign_dim
 
         # assignment(GNN_l,pool)
-        self.assignLayers = GnnLayerwithAdj(assign_params, two_dim=True, in_dim=in_dim)
+        self.assignLayers = GnnLayerwithAdj(assign_params, two_dim= self.two_dim, in_dim=in_dim)
         self.assignPredLayer = nn.Linear(assign_pred_input_dim, assign_dim)
 
         self.init_weights()
@@ -62,29 +63,29 @@ class DiffPool(nn.Module):
         # equation 5 (GNN_l,pool)
         self.assign_tensor = self.assignLayers(h, adj)
         # equation 6
-        self.assign_tensor = nn.Softmax(dim=-1)(
-            self.assignPredLayer(self.assign_tensor)
-        )
+        self.assign_tensor = self.assignPredLayer(self.assign_tensor)
+        self.assign_tensor = nn.Softmax(dim=-1)(self.assign_tensor)
         # update pooled feature and adj max
-        h = torch.matmul(torch.transpose(self.assign_tensor, 0, 1), h)
+        h = torch.matmul(torch.transpose(self.assign_tensor, -1, -2), h)
         adj = (
-            torch.transpose(self.assign_tensor, 0, 1)
-            @ adj.to_dense()
+            torch.transpose(self.assign_tensor, -1, -2)
+            @ adj
             @ self.assign_tensor
         )
+        # TODO: calculate the loss
         return h, adj
 
     def init_weights(self):
         for m in self.modules():
             if isinstance(m, GCNConv):
-                m.weight.data = init.xavier_uniform(
+                m.weight.data = init.xavier_uniform_(
                     m.weight.data, gain=nn.init.calculate_gain("relu")
                 )
                 if m.bias is not None:
-                    m.bias.data = init.constant(m.bias.data, 0.0)
+                    m.bias.data = init.constant_(m.bias.data, 0.0)
 
 
-# TODO
+"""
 class BatchedDiffPool(nn.Module):
     def __init__(self, params, in_dim, assign_dim):
         super(BatchedDiffPool, self).__init__()
@@ -122,7 +123,7 @@ class BatchedDiffPool(nn.Module):
 
     def forward(self, h, adj):
         # equation 5 (GNN_l,pool)
-        self.assign_tensor = self.gcn_forward(h, adj, self.assignLayers)
+        self.assign_tensor = self.assignLayers(h, adj)
         # equation 6
         self.assign_tensor = nn.Softmax(dim=-1)(
             self.assign_pred_modules(self.assign_tensor)
@@ -135,13 +136,12 @@ class BatchedDiffPool(nn.Module):
             @ self.assign_tensor
         )
         ### caculate loss ###
-        """
-        for loss_layer in self.reg_loss:
-            loss_name = str(type(loss_layer).__name__)
-            self.loss_log[loss_name] = loss_layer(adj, anext, s_l)
-        if log:
-            self.log["a"] = anext.cpu().numpy()
-        """
+        
+        #for loss_layer in self.reg_loss:
+        #    loss_name = str(type(loss_layer).__name__)
+        #    self.loss_log[loss_name] = loss_layer(adj, anext, s_l)
+        #if log:
+        #    self.log["a"] = anext.cpu().numpy()
         return h, adj
 
     def init_weights(self):
@@ -152,7 +152,7 @@ class BatchedDiffPool(nn.Module):
                 )
                 if m.bias is not None:
                     m.bias.data = init.constant(m.bias.data, 0.0)
-
+"""
 
 class DiffPoolReadout(nn.Module):
     def __init__(self):

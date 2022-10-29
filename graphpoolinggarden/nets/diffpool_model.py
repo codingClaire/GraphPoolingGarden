@@ -4,7 +4,7 @@ from torch_geometric.nn import global_add_pool, global_max_pool
 
 from layers.encoders import FeatureEncoder, ASTFeatureEncoder
 from layers.GNN_node import GnnLayerwithAdj
-from pooling.diffpooling_layer import DiffPool, BatchedDiffPool
+from pooling.diffpooling_layer import DiffPool
 from pooling.readoutlayer import ReadoutLayer
 
 
@@ -31,6 +31,7 @@ def batch2tensor(batch_adj, batch_feat, node_per_pool_graph):
 
 
 class diffPoolModel(nn.Module):
+
     def __init__(self, params):
         super(diffPoolModel, self).__init__()
         self.emb_dim = params["emb_dim"]
@@ -75,17 +76,15 @@ class diffPoolModel(nn.Module):
             self.pool_in_dim = self.emb_dim * self.num_layer
         else:
             self.pool_in_dim = self.emb_dim
-        self.firstDiffpoolLayer = DiffPool(
-            params["diffpool"], self.pool_in_dim, self.assign_dim
-        )
+        self.firstDiffpoolLayer = DiffPool(params["diffpool"], self.pool_in_dim, self.assign_dim, two_dim= True)
         self.firstGnnLayer = GnnLayerwithAdj(params, in_dim=self.emb_dim)
         self.assign_dim = int(self.assign_dim * self.assign_ratio)
         self.gnnLayers = nn.ModuleList()
         self.diffpoolLayers = nn.ModuleList()
         for _ in range(self.pool_num_layer - 1):
-            self.gnnLayers.append(GnnLayerwithAdj(params))
+            self.gnnLayers.append(GnnLayerwithAdj(params,two_dim=False))
             self.diffpoolLayers.append(
-                BatchedDiffPool(params["diffpool"], self.pool_in_dim, self.assign_dim)
+                DiffPool(params["diffpool"], self.pool_in_dim, self.assign_dim,two_dim=False)
             )
             self.assign_dim = int(self.assign_dim * self.assign_ratio)
 
@@ -150,7 +149,7 @@ class diffPoolModel(nn.Module):
             out_alls.append(out)
         # first layer
         h, adj = self.firstDiffpoolLayer(embedding_tensor,adj)
-        node_per_pool_graph = int(adj.shape[0] / batch.shape[0])
+        node_per_pool_graph = int(adj.shape[0] / (batch[-1]+1))
         h, adj = batch2tensor(adj, h, node_per_pool_graph)
         h = self.firstGnnLayer(h, adj)
         out = torch.sum(h, dim=1)
@@ -159,6 +158,7 @@ class diffPoolModel(nn.Module):
         for i in range(self.pool_num_layer):
             h, adj = self.diffpoolLayers[i](h, adj)
             h = self.gnnLayers[i](h, adj)
+            # TODO: debug from here!! 
             out = global_max_pool(h, batch)
             out_alls.append(out)
             if self.num_aggs == 2:

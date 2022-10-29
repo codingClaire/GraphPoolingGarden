@@ -1,5 +1,6 @@
 import torch
 import torch.nn.functional as F
+from torch.nn import init
 from layers.gin_layer import GINConv
 from layers.gcn_layer import GCNConv
 from layers.gcn_layer import GCNConvwithAdj
@@ -103,7 +104,7 @@ class GnnLayerwithAdj(torch.nn.Module):
             self.tensorized = kwargs["tensorized"]
         ###List of GNNs
         self.convs = torch.nn.ModuleList()
-        self.batch_norms = torch.nn.ModuleList()
+        # self.batch_norms = torch.nn.ModuleList()
 
         if self.gnn_type == 'gcn':
                 self.convs.append(GCNConvwithAdj(self.in_dim,self.emb_dim,self.drop_ratio))
@@ -114,27 +115,27 @@ class GnnLayerwithAdj(torch.nn.Module):
                 self.convs.append(GCNConvwithAdj(self.emb_dim,self.emb_dim,self.drop_ratio))
             else:
                 raise ValueError('Undefined GNN type called {}'.format(self.gnn_type))
+        
+            # self.batch_norms.append(torch.nn.BatchNorm1d(self.emb_dim))
+        
+        self.init_weights()
 
-            self.batch_norms.append(torch.nn.BatchNorm1d(self.emb_dim))
+    def batchNorm(self, x):
+        # both are work in 2d and 3d data
+        bn_module = torch.nn.BatchNorm1d(x.size()[1]).cuda()
+        return bn_module(x)
+
 
     def forward(self, h, adj):
         ### computing input node embedding
-        if self.two_dim == True:
-            cat_dim =1
-            h_list = []
-            for layer in range(self.num_layer):
-                # the input will be reversed
-                h = self.convs[layer](h,adj)
-                h_list.append(h) 
-        else:
-            cat_dim = 2
-            h_list = []
-            for layer in range(self.num_layer):
-                # the dropout operation is in self.convs[layers]
-                h = self.convs[layer](h, adj)
-                if layer != self.num_layer - 1:
-                    h = self.batch_norms[layer](F.relu(h))
-                h_list.append(h)
+        cat_dim =1 if self.two_dim == True else 2
+        h_list = []
+        for layer in range(self.num_layer):
+            # the dropout operation is in self.convs[layers]
+            h = self.convs[layer](h, adj)
+            if layer != self.num_layer - 1:
+                h = self.batchNorm(F.relu(h))
+            h_list.append(h)
 
         ### Different implementations of Jk-concat
         if self.JK == "last":
@@ -146,3 +147,12 @@ class GnnLayerwithAdj(torch.nn.Module):
         elif self.JK == "concat":
             node_representation = torch.cat(h_list,dim=cat_dim)
         return node_representation
+
+    def init_weights(self):
+        for m in self.modules():
+            if isinstance(m, GCNConvwithAdj):
+                m.weight.data = init.xavier_uniform_(
+                    m.weight.data, gain=torch.nn.init.calculate_gain("relu")
+                )
+                if m.bias is not None:
+                    m.bias.data = init.constant_(m.bias.data, 0.0)
