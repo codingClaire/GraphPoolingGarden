@@ -21,17 +21,22 @@ A repo for baseline of graph pooling methods.
 - graph-U-net
 - Diffpool
 
-### Model Framework
+## Model Framework
 
--hierarchical model
--sequencial model
--U-net-like model: only for graph U-net model
--diffpooling model: only for diffpool model 
+- hierarchical model
+- sequencial model
+- U-net-like model: only for graph U-net model
+- diffpooling model: only for diffpool model 
 
 ## Readout methods
 - mean
 - max
-- su
+- sum
+
+## ConvLayer
+
+- GCN
+- GIN
 
 
 ## Usage
