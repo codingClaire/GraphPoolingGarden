@@ -165,3 +165,6 @@ class graphUnetModel(nn.Module):
             return pred_list
         else:
             return self.graph_pred_linear(graph_representation)
+
+    def get_model_loss(self):
+        return 0

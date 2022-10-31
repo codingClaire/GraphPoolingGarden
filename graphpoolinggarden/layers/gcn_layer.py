@@ -54,14 +54,14 @@ class GCNConv(MessagePassing):
 
 class GCNConvwithAdj(torch.nn.Module):
     # the edge_attr is not encoded in SingleGCNwithAdj
-    def __init__(self, in_dim, emb_dim, drop_ratio, bias=True):
+    def __init__(self, in_dim, emb_dim, drop_ratio, device, bias=True):
         super(GCNConvwithAdj, self).__init__()
         self.drop_ratio = drop_ratio
         self.emb_dim = emb_dim
         self.in_dim = in_dim
-        self.weight = torch.nn.Parameter(torch.FloatTensor(self.in_dim , self.emb_dim).cuda())
+        self.weight = torch.nn.Parameter(torch.FloatTensor(self.in_dim , self.emb_dim).to(device))
         if bias:
-            self.bias = torch.nn.Parameter(torch.FloatTensor(self.emb_dim).cuda())
+            self.bias = torch.nn.Parameter(torch.FloatTensor(self.emb_dim).to(device))
         else:
             self.bias = None
 

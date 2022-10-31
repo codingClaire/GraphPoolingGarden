@@ -15,7 +15,7 @@ class PoolingLayer(torch.nn.Module):
         #    self.pool = DiffPool(params["diffpool"], self.hidden_dim, self.embed_dim)
         if self.graph_pooling == "graphunetpool":
             self.pool = GraphUnetPool(
-                kwargs["k"], params["graphunetpool"], self.embed_dim
+                kwargs["k"], params["graphunetpool"], self.embed_dim,
             )
         else:
             raise ValueError("Invalid graph pooling type.")

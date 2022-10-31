@@ -7,7 +7,6 @@ from torch_geometric.nn import (
     Set2Set,
 )
 from pooling.sagpooling_layer import SAGPoolReadout
-from pooling.diffpooling_layer import DiffPoolReadout
 from pooling.graphunet_pooling_layer import GraphUnetReadout
 
 class ReadoutLayer(torch.nn.Module):
@@ -36,8 +35,6 @@ class ReadoutLayer(torch.nn.Module):
             self.readout = Set2Set(self.embed_dim, processing_steps=2)
         elif self.graph_pooling == "sagpool":
             self.readout = SAGPoolReadout(params["sagpool"], self.embed_dim)
-        elif self.graph_pooling == "diffpool":
-            self.readout = DiffPoolReadout()
         elif self.graph_pooling == "graphunetpool":
             self.readout = GraphUnetReadout()
         else:

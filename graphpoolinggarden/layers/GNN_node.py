@@ -82,6 +82,7 @@ class GnnLayerwithAdj(torch.nn.Module):
         super(GnnLayerwithAdj, self).__init__()
         self.num_layer =  params["num_layer"]
         self.drop_ratio = params["drop_ratio"]
+        self.device = params["device"]
         if "JK" not in params.keys():
             self.JK = "last"
         else:
@@ -107,12 +108,12 @@ class GnnLayerwithAdj(torch.nn.Module):
         # self.batch_norms = torch.nn.ModuleList()
 
         if self.gnn_type == 'gcn':
-                self.convs.append(GCNConvwithAdj(self.in_dim,self.emb_dim,self.drop_ratio))
+                self.convs.append(GCNConvwithAdj(self.in_dim,self.emb_dim,self.drop_ratio,self.device))
         else:
             raise ValueError('Undefined GNN type called {}'.format(self.gnn_type))
         for _ in range(self.num_layer-1):
             if self.gnn_type == 'gcn':
-                self.convs.append(GCNConvwithAdj(self.emb_dim,self.emb_dim,self.drop_ratio))
+                self.convs.append(GCNConvwithAdj(self.emb_dim,self.emb_dim,self.drop_ratio,self.device))
             else:
                 raise ValueError('Undefined GNN type called {}'.format(self.gnn_type))
         
@@ -122,7 +123,7 @@ class GnnLayerwithAdj(torch.nn.Module):
 
     def batchNorm(self, x):
         # both are work in 2d and 3d data
-        bn_module = torch.nn.BatchNorm1d(x.size()[1]).cuda()
+        bn_module = torch.nn.BatchNorm1d(x.size()[1]).to(self.device)
         return bn_module(x)
 
 
