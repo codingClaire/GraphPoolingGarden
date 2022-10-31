@@ -30,6 +30,7 @@
 - set2set
 - sagpool(sequence/hierarchical)
 - Graph U-net
+- Diffpool
 
 ## 支持的readout方法
 - mean
@@ -46,7 +47,7 @@
     "dataset_name": ["ENZYMES"],
     "batch_size": 2,
     "epochs": 100,
-    "seed": [54,422,211,109,43],
+    "seed": [1,2,3,4,5],
     "model":"global",
     "gnn_type": "gcn",
     "num_layer": 3,
