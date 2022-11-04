@@ -40,6 +40,8 @@ class ReadoutLayer(torch.nn.Module):
         else:
             raise ValueError("Invalid graph pooling type.")
 
-    def forward(self, hs, graph_indicators):
+    def forward(self, hs, gs):
         if self.graph_pooling == "graphunetpool":
-            return self.readout(hs,graph_indicators)
+            return self.readout(hs,gs)
+        else:
+            return self.readout(hs,gs.batch)

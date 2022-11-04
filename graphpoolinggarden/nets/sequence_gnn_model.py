@@ -18,7 +18,7 @@ class sequenceModel(torch.nn.Module):
         self.dataset_name = params["dataset_name"]
         self.virtual_node = params["virtual_node"]
         # check validation
-        if self.gnn_type not in ["gcn", "gin"]:
+        if self.gnn_type not in ["gcn", "gin","graphsage"]:
             raise ValueError("Invalid GNN type.")
         if self.num_layer < 2:
             raise ValueError("Number of GNN layers must be greater than 1.")

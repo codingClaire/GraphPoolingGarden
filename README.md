@@ -32,12 +32,13 @@ A repo for baseline of graph pooling methods.
 - mean
 - max
 - sum
+- set2set
 
 ## ConvLayer
 
-- GCN
-- GIN
-
+- GCN: `layers/gcn_layer.py`
+- GIN: `layers/gin_layer.py`
+- GraphSAGE:`layers/graphsage_layer.py`
 
 ## Usage
 
@@ -87,6 +88,7 @@ The program is built based on the code of the following released codes and progr
 * [Graph-U-Nets](https://github.com/HongyangGao/Graph-U-Nets)
 * [DiffPool](https://github.com/RexYing/diffpool)
 * [DGL](https://github.com/dmlc/dgl)
+* [Pytorch Geometrics](https://github.com/pyg-team/pytorch_geometric)
 
 We appreciate the authors' effort for the contribution to the research community.
 

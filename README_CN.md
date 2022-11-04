@@ -26,7 +26,14 @@
   - ogbg-ppa
   - ogbg-code2
 
+## 支持的GNN层
+
+- GCN: `layers/gcn_layer.py`
+- GIN: `layers/gin_layer.py`
+- GraphSAGE:`layers/graphsage_layer.py`
+
 ## 支持的pooling方法
+
 - set2set
 - sagpool(sequence/hierarchical)
 - Graph U-net

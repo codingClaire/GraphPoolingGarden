@@ -4,6 +4,7 @@ from torch.nn import init
 from layers.gin_layer import GINConv
 from layers.gcn_layer import GCNConv
 from layers.gcn_layer import GCNConvwithAdj
+from layers.graphsage_layer import GraphSAGEConv
 
 ### GNN to generate node embedding
 class GnnLayer(torch.nn.Module):
@@ -35,6 +36,8 @@ class GnnLayer(torch.nn.Module):
                 self.convs.append(GINConv(self.dataset_name, self.edge_dim,self.emb_dim))
             elif self.gnn_type == 'gcn':
                 self.convs.append(GCNConv(self.dataset_name,self.edge_dim,self.emb_dim))
+            elif self.gnn_type == 'graphsage':
+                self.convs.append(GraphSAGEConv(self.dataset_name, self.edge_dim, self.emb_dim))
             else:
                 raise ValueError('Undefined GNN type called {}'.format(self.gnn_type))
 
