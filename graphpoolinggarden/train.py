@@ -38,7 +38,7 @@ reg_criterion = torch.nn.MSELoss()
 def train(model, device, loader, optimizer, task_type):
     model.train()
 
-    for _, batch in enumerate(tqdm(loader, desc="Iteration")):
+    for _, batch in enumerate(tqdm(loader, desc="Iteration",mininterval=60)):
         batch = batch.to(device)
 
         if batch.x.shape[0] == 1 or batch.batch[-1] == 0:
@@ -87,7 +87,7 @@ def eval(model, device, loader, evaluator, task_type):
     y_true = []
     y_pred = []
 
-    for _, batch in enumerate(tqdm(loader, desc="Iteration")):
+    for _, batch in enumerate(tqdm(loader, desc="Iteration",mininterval=60)):
         batch = batch.to(device)
         with torch.no_grad():
             pred = model(batch)
@@ -117,7 +117,7 @@ def eval_for_code(model, device, loader, evaluator, arr_to_seq):
     seq_ref_list = []
     seq_pred_list = []
 
-    for _, batch in enumerate(tqdm(loader, desc="Iteration")):
+    for _, batch in enumerate(tqdm(loader, desc="Iteration",mininterval=60)):
         batch = batch.to(device)
         if batch.x.shape[0] == 1:
             pass

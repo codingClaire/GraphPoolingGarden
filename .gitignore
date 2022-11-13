@@ -3,6 +3,7 @@
 *.gz
 *.pyc
 *.out
+*.log
 
 # some test files
 .vscode/
