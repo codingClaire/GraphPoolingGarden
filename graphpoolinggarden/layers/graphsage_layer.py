@@ -34,17 +34,16 @@ class GraphSAGEConv(MessagePassing):
             self.lin_r.reset_parameters()
 
 
-    def forward(self, x, edge_index, edge_attr,size=None):
+    def forward(self, x, edge_index, edge_attr):
         if edge_attr != None and len(edge_attr.shape) != 1:
             edge_emb = self.edge_encoder(edge_attr)
         if isinstance(x, Tensor):
             x = (x, x)
-        out = self.propagate(edge_index, x=x, edge_attr=edge_emb, size=size)
+        out = self.propagate(edge_index, x=x, edge_attr=edge_emb)
         out = self.lin_l(out)
 
-        x_r = x[1]
-        if self.root_weight and x_r is not None:
-            out += self.lin_r(x_r)
+        if self.root_weight and x[1] is not None:
+            out += self.lin_r(x[1])
 
         if self.normalize:
             out = F.normalize(out, p=2., dim=-1)

@@ -161,15 +161,15 @@ def seed_everything(seed_value):
 
 def main(net_parameters):
     net_parameters = check_parameter(net_parameters)
-    """
+
     device = (
         torch.device("cuda:" + str(net_parameters["device"]))
         if torch.cuda.is_available()
         else torch.device("cpu")
     )
-    """
-    net_parameters["device"] = torch.device("cpu")
-    device = net_parameters["device"]
+
+    # net_parameters["device"] = torch.device("cpu")
+    # device = net_parameters["device"]
 
     ### deal with dataset info
     dataset = DatasetLoader.load_dataset(net_parameters["dataset_name"])
